@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>NEON DRIFT // Controller</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at center, #140a24 0%, #05020a 100%);
+    font-family: 'Segoe UI', Arial, sans-serif; color: #cdefff; touch-action: none;
+  }
+
+  #setup {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 24px; z-index: 50;
+    background: #05020aee;
+  }
+  #setup h1 { color: #ff2fd0; text-shadow: 0 0 10px #ff2fd0; font-size: 22px; letter-spacing: 2px; margin: 0 0 6px; }
+  #setup input {
+    width: 100%; max-width: 320px; background: #0d0a18; border: 1px solid #7ef9ff55;
+    color: #7ef9ff; padding: 12px; border-radius: 8px; font-size: 16px; font-family: monospace; text-align:center;
+  }
+  #setup button, .bigBtn {
+    width: 100%; max-width: 320px; padding: 14px; border-radius: 10px; border: 1px solid #ff2fd0aa;
+    background: linear-gradient(90deg,#1a0b22,#220b1a); color: #ff8be8; font-size: 15px; font-weight: 700;
+    letter-spacing: 1px;
+  }
+  #setup small { opacity: .6; text-align: center; max-width: 320px; line-height: 1.5; }
+  #rotateWarning {
+    position: fixed; inset: 0; background: #000; color: #7ef9ff; display: none;
+    align-items: center; justify-content: center; text-align: center; z-index: 100; font-size: 18px; padding: 30px;
+  }
+  @media (orientation: portrait) { #rotateWarning.active { display: flex; } }
+
+  #game { position: fixed; inset: 0; display: none; }
+  #game.active { display: block; }
+
+  #topBar {
+    position: absolute; top: 8px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 8px; z-index: 5;
+  }
+  #linkStatus {
+    padding: 6px 16px; border-radius: 20px; background: rgba(10,10,20,0.6); border: 1px solid #ff2fd0;
+    font-size: 11px; letter-spacing: 1px; color: #ff8be8;
+  }
+  #linkStatus.on { border-color: #39ff88; color: #9fffcf; }
+
+  #modeSwitch {
+    display: flex; gap: 6px; background: rgba(10,10,20,0.6); border-radius: 20px; padding: 3px; border: 1px solid #7ef9ff33;
+  }
+  .modeBtn {
+    padding: 6px 14px; border-radius: 16px; border: none; background: transparent; color: #7ef9ff88;
+    font-size: 11px; letter-spacing: 1px; font-weight: 700;
+  }
+  .modeBtn.active { background: #00e5ff; color: #05020a; box-shadow: 0 0 10px #00e5ff88; }
+
+  #steerWheelWrap {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 46vh; height: 46vh; max-width: 320px; max-height: 320px; pointer-events: none;
+  }
+  #steerWheel {
+    width: 100%; height: 100%; border-radius: 50%;
+    border: 6px solid #00e5ff; box-shadow: 0 0 30px #00e5ff88, inset 0 0 30px #00e5ff33;
+    position: relative; transition: transform 0.05s linear;
+  }
+  #steerWheel::before {
+    content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 42%;
+    background: #00e5ff; box-shadow: 0 0 10px #00e5ff; transform: translate(-50%, -100%);
+  }
+  #steerWheel::after {
+    content: ""; position: absolute; top: 50%; left: 50%; width: 40px; height: 40px;
+    background: #ff2fd0; border-radius: 50%; box-shadow: 0 0 20px #ff2fd0; transform: translate(-50%, -50%);
+  }
+  #steerReadout {
+    position: absolute; top: calc(50% + 26vh); left: 50%; transform: translateX(-50%);
+    font-size: 12px; opacity: .7; letter-spacing: 1px;
+  }
+
+  /* Arrow steering mode */
+  #arrowWrap {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    display: none; gap: 6vh; align-items: center; justify-content: center;
+  }
+  #arrowWrap.active { display: flex; }
+  .arrowBtn {
+    width: 20vh; height: 20vh; max-width: 140px; max-height: 140px; border-radius: 24px;
+    border: 4px solid #00e5ff; color: #00e5ff; background: rgba(0,229,255,0.08);
+    box-shadow: 0 0 20px #00e5ff55; font-size: 46px; display: flex; align-items: center; justify-content: center;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .arrowBtn.pressed { transform: scale(0.9); box-shadow: 0 0 40px #00e5ff; background: rgba(0,229,255,0.25); }
+
+  .pedal {
+    position: absolute; bottom: 6vh; width: 26vh; height: 26vh; max-width: 170px; max-height: 170px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800; letter-spacing: 1px; z-index: 6;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  #brakeBtn { left: 5vw; border: 4px solid #ff2f5f; color: #ff8fa8; box-shadow: 0 0 20px #ff2f5f55; background: rgba(255,47,95,0.08); }
+  #gasBtn { right: 5vw; border: 4px solid #39ff88; color: #9fffcf; box-shadow: 0 0 20px #39ff8855; background: rgba(57,255,136,0.08); }
+  .pedal.pressed { transform: scale(0.9); box-shadow: 0 0 40px currentColor; }
+
+  #calibrateBtn {
+    position: absolute; bottom: 2vh; left: 50%; transform: translateX(-50%);
+    padding: 8px 16px; font-size: 11px; border-radius: 20px; border: 1px solid #7ef9ff55;
+    background: rgba(10,10,20,0.6); color: #7ef9ff; z-index: 6;
+  }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <h1>NEON DRIFT</h1>
+  <input id="hostInput" type="text" placeholder="192.168.1.5:8000 or xxxx.ngrok-free.app" autocapitalize="off" autocorrect="off" />
+  <button id="enableBtn" class="bigBtn">ENABLE MOTION + CONNECT</button>
+  <small>Enter the same backend address shown on your laptop game screen. On iOS you'll get a motion-permission popup — tap Allow. Then hold your phone sideways like a wheel. (You can switch to on-screen arrow steering anytime from the game screen.)</small>
+</div>
+
+<div id="rotateWarning" class="active">⟳<br/>Rotate your phone to landscape<br/>to start racing</div>
+
+<div id="game">
+  <div id="topBar">
+    <div id="linkStatus">LINKING…</div>
+    <div id="modeSwitch">
+      <button class="modeBtn active" id="gyroModeBtn">GYRO</button>
+      <button class="modeBtn" id="arrowModeBtn">ARROWS</button>
+    </div>
+  </div>
+
+  <div id="steerWheelWrap">
+    <div id="steerWheel"></div>
+    <div id="steerReadout" id="steerReadoutText">0°</div>
+  </div>
+
+  <div id="arrowWrap">
+    <div class="arrowBtn" id="leftArrowBtn">◀</div>
+    <div class="arrowBtn" id="rightArrowBtn">▶</div>
+  </div>
+
+  <div class="pedal" id="brakeBtn">BRAKE</div>
+  <div class="pedal" id="gasBtn">GAS</div>
+  <button id="calibrateBtn">RE-CENTER STEERING</button>
+</div>
+
+<script>
+(function () {
+  const setup = document.getElementById("setup");
+  const gameUI = document.getElementById("game");
+  const rotateWarning = document.getElementById("rotateWarning");
+  const hostInput = document.getElementById("hostInput");
+  const linkStatus = document.getElementById("linkStatus");
+  const steerWheel = document.getElementById("steerWheel");
+  const steerWheelWrap = document.getElementById("steerWheelWrap");
+  const steerReadout = document.getElementById("steerReadoutText");
+  const brakeBtn = document.getElementById("brakeBtn");
+  const gasBtn = document.getElementById("gasBtn");
+  const calibrateBtn = document.getElementById("calibrateBtn");
+  const gyroModeBtn = document.getElementById("gyroModeBtn");
+  const arrowModeBtn = document.getElementById("arrowModeBtn");
+  const arrowWrap = document.getElementById("arrowWrap");
+  const leftArrowBtn = document.getElementById("leftArrowBtn");
+  const rightArrowBtn = document.getElementById("rightArrowBtn");
+
+  hostInput.value = localStorage.getItem("racer_host") || "";
+
+  const state = { steer: 0, throttle: 0, brake: 0 };
+  let calibrationOffset = 0;
+  let ws = null;
+
+  // "gyro" or "arrows"
+  let steerMode = localStorage.getItem("racer_steerMode") || "gyro";
+
+  function applyModeUI() {
+    const isGyro = steerMode === "gyro";
+    gyroModeBtn.classList.toggle("active", isGyro);
+    arrowModeBtn.classList.toggle("active", !isGyro);
+    steerWheelWrap.style.display = isGyro ? "block" : "none";
+    calibrateBtn.style.display = isGyro ? "block" : "none";
+    arrowWrap.classList.toggle("active", !isGyro);
+    state.steer = 0; // reset steering whenever mode changes
+    if (isGyro) steerWheel.style.transform = "rotate(0deg)";
+  }
+
+  function setMode(mode) {
+    steerMode = mode;
+    localStorage.setItem("racer_steerMode", mode);
+    applyModeUI();
+  }
+
+  gyroModeBtn.addEventListener("click", () => setMode("gyro"));
+  arrowModeBtn.addEventListener("click", () => setMode("arrows"));
+
+  function connectWS(host) {
+    localStorage.setItem("racer_host", host);
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const url = host.startsWith("ws") ? host : `${proto}://${host}/ws/mobile`;
+    ws = new WebSocket(url);
+    ws.onopen = () => { linkStatus.textContent = "LINKED"; linkStatus.classList.add("on"); };
+    ws.onclose = () => {
+      linkStatus.textContent = "RECONNECTING…"; linkStatus.classList.remove("on");
+      setTimeout(() => connectWS(host), 1500);
+    };
+    ws.onerror = () => {};
+  }
+
+  function startSending() {
+    setInterval(() => {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ steer: state.steer, throttle: state.throttle, brake: state.brake }));
+      }
+    }, 40); // 25Hz
+  }
+
+  // --- Gyroscope steering ---
+  // DIRECTION_SIGN controls which way the car turns when you tilt the phone.
+  // Set to 1 so: tilt phone RIGHT -> car turns RIGHT, tilt LEFT -> car turns LEFT.
+  // If you ever want the opposite (right tilt = car left), just change 1 to -1 below.
+  const DIRECTION_SIGN = 1;
+  function handleOrientation(e) {
+    if (steerMode !== "gyro") return; // ignore gyro input while in arrow mode
+
+    // beta = front-to-back tilt, which becomes the left/right steering axis
+    // once the phone is held sideways (landscape) like a wheel.
+    let raw = e.beta;
+    if (raw == null) raw = e.gamma || 0;
+
+    let value = DIRECTION_SIGN * (raw - calibrationOffset) / 55; // ~55deg tilt = full lock
+    value = Math.max(-1, Math.min(1, value));
+    state.steer = value;
+
+    const deg = Math.round(value * 45);
+    steerWheel.style.transform = `rotate(${deg}deg)`;
+    steerReadout.textContent = `${Math.round(raw)}°`;
+  }
+
+  function calibrate() {
+    // capture current beta as the "center" — user should be holding phone level like a wheel
+    calibrationOffset = window.__lastBeta || 0;
+  }
+
+  window.addEventListener("deviceorientation", (e) => {
+    window.__lastBeta = e.beta;
+    handleOrientation(e);
+  });
+
+  calibrateBtn.addEventListener("click", calibrate);
+
+  // --- Touch pedals (press and hold) ---
+  function bindPedal(el, key) {
+    const on = (ev) => { ev.preventDefault(); state[key] = 1; el.classList.add("pressed"); };
+    const off = (ev) => { ev.preventDefault(); state[key] = 0; el.classList.remove("pressed"); };
+    el.addEventListener("touchstart", on, { passive: false });
+    el.addEventListener("touchend", off, { passive: false });
+    el.addEventListener("touchcancel", off, { passive: false });
+    el.addEventListener("mousedown", on);
+    el.addEventListener("mouseup", off);
+    el.addEventListener("mouseleave", off);
+  }
+  bindPedal(gasBtn, "throttle");
+  bindPedal(brakeBtn, "brake");
+
+  // --- Arrow steering (press and hold, full lock left/right) ---
+  function bindArrow(el, value) {
+    const on = (ev) => {
+      ev.preventDefault();
+      if (steerMode !== "arrows") return;
+      state.steer = value;
+      el.classList.add("pressed");
+    };
+    const off = (ev) => {
+      ev.preventDefault();
+      if (steerMode !== "arrows") return;
+      state.steer = 0;
+      el.classList.remove("pressed");
+    };
+    el.addEventListener("touchstart", on, { passive: false });
+    el.addEventListener("touchend", off, { passive: false });
+    el.addEventListener("touchcancel", off, { passive: false });
+    el.addEventListener("mousedown", on);
+    el.addEventListener("mouseup", off);
+    el.addEventListener("mouseleave", off);
+  }
+  bindArrow(leftArrowBtn, -1);
+  bindArrow(rightArrowBtn, 1);
+
+  // --- Orientation lock UI ---
+  function checkOrientation() {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    rotateWarning.classList.toggle("active", isPortrait);
+  }
+  window.addEventListener("resize", checkOrientation);
+  window.addEventListener("orientationchange", checkOrientation);
+
+  // --- Entry point ---
+  document.getElementById("enableBtn").addEventListener("click", async () => {
+    const host = hostInput.value.trim();
+    if (!host) { alert("Enter the backend host first."); return; }
+
+    // iOS 13+ requires explicit permission
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== "granted") { alert("Motion permission denied — steering needs this. You can still use ARROWS mode instead."); }
+      } catch (err) { /* ignore — arrow mode still works */ }
+    }
+
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); } catch (e) {}
+
+    setup.style.display = "none";
+    gameUI.classList.add("active");
+    checkOrientation();
+    applyModeUI();
+    connectWS(host);
+    startSending();
+  });
+})();
+</script>
+</body>
+</html>

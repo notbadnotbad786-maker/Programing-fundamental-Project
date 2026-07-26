@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VIBRANT HORIZON // Anime Racing System</title>
+<style>
+  /* ============================================================
+     GLOBAL ENGINE RESET & FONTS
+     ============================================================ */
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  html, body { 
+    margin: 0; padding: 0; overflow: hidden; 
+    width: 100%; height: 100%; 
+    background: #110e18; 
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+  canvas { display: block; width: 100% !important; height: 100% !important; z-index: 1; }
+
+  /* ============================================================
+     PROFESSIONAL HEADS-UP DISPLAY (HUD)
+     ============================================================ */
+  #hud-container {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    padding: 24px; display: flex; flex-direction: column; justify-content: space-between;
+  }
+
+  /* Connection Panel & Real-time Status */
+  .top-interface { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
+  
+  #connection-widget {
+    background: rgba(16, 16, 24, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 16px; width: 280px;
+    pointer-events: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  #connection-widget.hidden {
+    opacity: 0; transform: translateY(-30px); pointer-events: none;
+  }
+
+  .widget-title {
+    font-size: 11px; font-weight: 700; color: #a0aec0;
+    text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
+  }
+
+  .status-badge {
+    display: inline-flex; align-items: center; 
+    background: rgba(231, 76, 60, 0.15);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    padding: 6px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; color: #e74c3c;
+    margin-bottom: 12px; transition: all 0.3s ease;
+  }
+  
+  .status-badge.connected {
+    background: rgba(46, 204, 113, 0.15);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    color: #2ecc71;
+  }
+
+  .status-badge .indicator-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #e74c3c; margin-right: 8px;
+    box-shadow: 0 0 8px #e74c3c;
+  }
+  
+  .status-badge.connected .indicator-dot {
+    background: #2ecc71; box-shadow: 0 0 8px #2ecc71;
+  }
+
+  .input-wrapper { position: relative; width: 100%; margin-bottom: 10px; }
+  .input-wrapper input {
+    width: 100%; background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px; padding: 10px 12px;
+    color: #ffffff; font-size: 13px; outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .input-wrapper input:focus { border-color: #f39c12; }
+
+  #connect-trigger-btn {
+    width: 100%; padding: 10px; border-radius: 6px; border: none;
+    background: linear-gradient(135deg, #f39c12, #d35400);
+    color: #ffffff; font-weight: 700; font-size: 13px;
+    cursor: pointer; letter-spacing: 0.5px;
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+    transition: all 0.2s ease;
+  }
+  #connect-trigger-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(243, 156, 18, 0.4); }
+  #connect-trigger-btn:active { transform: translateY(1px); }
+
+  /* Bottom Telemetry Dashboard */
+  .bottom-interface {
+    display: flex; justify-content: space-between; align-items: flex-end; width: 100%;
+  }
+
+  #control-guide {
+    background: rgba(16, 16, 24, 0.6); border-left: 3px solid #f39c12;
+    padding: 12px 16px; border-radius: 0 8px 8px 0;
+    font-size: 12px; color: #cbd5e0; line-height: 1.6; font-weight: 500;
+  }
+
+  #telemetry-speedometer { text-align: right; }
+  #telemetry-speedometer .numeric-display {
+    font-size: 72px; font-weight: 900; color: #ffffff;
+    line-height: 0.8; font-style: italic;
+    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), 0 0 20px rgba(243, 156, 18, 0.2);
+  }
+  #telemetry-speedometer .unit-display {
+    font-size: 16px; font-weight: 700; color: #f39c12;
+    letter-spacing: 1px; text-transform: uppercase; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud-container">
+  <div class="top-interface">
+    <div id="connection-widget">
+      <div class="widget-title">Hardware Controller Link</div>
+      <div class="status-badge" id="engine-status-badge">
+        <span class="indicator-dot"></span>
+        <span id="engine-status-text">Disconnected</span>
+      </div>
+      <div class="input-wrapper">
+        <input id="network-host-input" type="text" placeholder="Server IP e.g. 192.168.1.5:8000" />
+      </div>
+      <button id="connect-trigger-btn">ESTABLISH LINK</button>
+    </div>
+    <div></div>
+  </div>
+
+  <div class="bottom-interface">
+    <div id="control-guide">
+      <span style="color:#ffffff; font-weight:700;">DRIVE CONTROL SYSTEMS</span><br/>
+      Steering: A / D or Left / Right Arrows<br/>
+      Drive/Brake: W / S or Up / Down Arrows
+    </div>
+    <div id="telemetry-speedometer">
+      <div class="numeric-display" id="hud-velocity-value">0</div>
+      <div class="unit-display">KM/H</div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
+
+/* ============================================================
+   GLOBAL GRAPHICS ENGINE INITIALIZATION
+   ============================================================ */
+const scene = new THREE.Scene();
+
+// Vibrant Sunset Color Spectrum for Skybox Background
+scene.background = new THREE.Color(0xffaa44); 
+
+// Daytime-Sunset Balanced Atmosphere Fog (Reduces dark silhouette errors)
+scene.fog = new THREE.FogExp2(0xec9f48, 0.0015);
+
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 3000);
+// Elevated cinematic chase camera angle setup
+camera.position.set(0, 4.5, -9.5);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: false,
+  powerPreference: "high-performance",
+  stencil: false,
+  depth: true
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15; // Enhanced bright baseline exposure
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Clean soft shadows
+document.body.appendChild(renderer.domElement);
+
+/* ============================================================
+   LIGHTING ARCHITECTURE (ANIME SUNSET & FULL-DAYTIME HYBRID)
+   ============================================================ */
+// Primary Sun Light - High Intensity Gold-White Sun to ensure bright tracking visibility
+const mainSunLight = new THREE.DirectionalLight(0xfff3e0, 2.5);
+mainSunLight.position.set(250, 180, -150);
+mainSunLight.castShadow = true;
+
+// Shadow Map Resolution settings for optimal clarity without lagging
+mainSunLight.shadow.mapSize.width = 2048;
+mainSunLight.shadow.mapSize.height = 2048;
+mainSunLight.shadow.camera.near = 0.5;
+mainSunLight.shadow.camera.far = 800;
+
+const dCamLimit = 150;
+mainSunLight.shadow.camera.left = -dCamLimit;
+mainSunLight.shadow.camera.right = dCamLimit;
+mainSunLight.shadow.camera.top = dCamLimit;
+mainSunLight.shadow.camera.bottom = -dCamLimit;
+mainSunLight.shadow.bias = -0.0002;
+scene.add(mainSunLight);
+
+// Sky light reflection to illuminate vertical architectural planes bright orange-pink
+const ambientSkyLight = new THREE.AmbientLight(0xffcc80, 0.95);
+scene.add(ambientSkyLight);
+
+// Secondary Hemi-Directional Bounce Light to erase overly pitch-black ground shadows
+const groundFillLight = new THREE.DirectionalLight(0xffffff, 0.85);
+groundFillLight.position.set(-200, 100, 150);
+scene.add(groundFillLight);
+
+/* ============================================================
+   UI CONNECT PANEL WORKFLOW & HIDDEN FUNCTIONALITY
+   ============================================================ */
+const connectBtn = document.getElementById("connect-trigger-btn");
+const connectPanel = document.getElementById("connection-widget");
+const statusBadge = document.getElementById("engine-status-badge");
+const statusText = document.getElementById("engine-status-text");
+const hostInputEl = document.getElementById("network-host-input");
+
+hostInputEl.value = localStorage.getItem("racer_host") || "";
+
+let controllerSocket = null;
+
+function connectToBackend() {
+  const host = hostInputEl.value.trim();
+  if (!host) {
+    statusText.textContent = "Enter a host first";
+    return;
+  }
+  localStorage.setItem("racer_host", host);
+
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const url = host.startsWith("ws") ? host : `${protocol}://${host}/ws/laptop`;
+
+  statusText.textContent = "Connecting…";
+
+  try {
+    controllerSocket = new WebSocket(url);
+
+    controllerSocket.onopen = () => {
+      statusBadge.classList.add("connected");
+      statusText.textContent = "Active Link Secured";
+    };
+
+    controllerSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (typeof data.steer === "number") hardwareControlMap.steeringInput = Math.max(-1, Math.min(1, data.steer));
+        if (typeof data.throttle === "number") hardwareControlMap.acceleratorInput = Math.max(0, Math.min(1, data.throttle));
+        if (typeof data.brake === "number") hardwareControlMap.decelerationInput = Math.max(0, Math.min(1, data.brake));
+      } catch (err) { /* ignore malformed packets */ }
+    };
+
+    controllerSocket.onclose = () => {
+      statusBadge.classList.remove("connected");
+      statusText.textContent = "Disconnected — retrying…";
+      hardwareControlMap.steeringInput = 0;
+      hardwareControlMap.acceleratorInput = 0;
+      hardwareControlMap.decelerationInput = 0;
+      setTimeout(connectToBackend, 2000);
+    };
+
+    controllerSocket.onerror = () => {
+      statusText.textContent = "Connection error";
+    };
+  } catch (err) {
+    statusText.textContent = "Invalid host";
+  }
+}
+
+connectBtn.addEventListener("click", connectToBackend);
+if (hostInputEl.value) connectToBackend();
+
+/* ============================================================
+   POST-PROCESSING PIPELINE STAGE
+   ============================================================ */
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// Anti-aliasing pass processing
+const fxaaPass = new ShaderPass(FXAAShader);
+const pixelRatio = renderer.getPixelRatio();
+fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+composer.addPass(fxaaPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);/* ============================================================
+   ADVANCED PROCEDURAL ANIME TRACK & LANDSCAPE SYSTEM
+   ============================================================ */
+
+// Detailed Racing Path Coordinates
+const trackWaypoints = [
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(90, 0, 70),
+  new THREE.Vector3(180, 0, 160),
+  new THREE.Vector3(260, 0, 310),
+  new THREE.Vector3(140, 0, 480),
+  new THREE.Vector3(-60, 0, 520),
+  new THREE.Vector3(-220, 0, 410),
+  new THREE.Vector3(-290, 0, 220),
+  new THREE.Vector3(-160, 0, 80),
+  new THREE.Vector3(0, 0, 0)
+];
+
+// Smooth interpolation for highway curve using CatmullRom
+const trackSpline = new THREE.CatmullRomCurve3(trackWaypoints, true, "centripetal", 0.5);
+const trackSplinePoints = trackSpline.getSpacedPoints(700); 
+const HIGHWAY_WIDTH = 22; // Wider track for better high-speed visibility
+
+/**
+ * Creates a high-fidelity stylized anime asphalt material with clean markings
+ */
+function createAnimeAsphaltTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 1024;
+  const ctx = canvas.getContext("2d");
+
+  // Base Dark Indigo-Grey Asphalt (Anime style clean shading)
+  ctx.fillStyle = "#2c2c35";
+  ctx.fillRect(0, 0, 512, 1024);
+
+  // Subtle stylized road noise/grain
+  ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
+  for (let i = 0; i < 3000; i++) {
+    const rx = Math.random() * 512;
+    const ry = Math.random() * 1024;
+    ctx.fillRect(rx, ry, 2, 2);
+  }
+
+  // Solid Crisp White Outer Borders
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, 18, 1024);       // Left boundary
+  ctx.fillRect(494, 0, 18, 1024);     // Right boundary
+
+  // Vibrant Neon Yellow Center Dash Lane Dividers (Dynamic Sunset Visuals)
+  ctx.fillStyle = "#ffcc00";
+  const dashHeight = 70;
+  const dashGap = 50;
+  for (let y = 0; y < 1024; y += (dashHeight + dashGap)) {
+    ctx.fillRect(251, y, 10, dashHeight);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 35); // Clean tiling balance along the loop
+  texture.anisotropy = 16;   // Max sharpness at distance angles
+  return texture;
+}
+
+/**
+ * Builds the comprehensive multi-layered road mesh structure
+ */
+function generateHighwayTrack() {
+  const roadPositions = [];
+  const roadUVs = [];
+  const roadIndices = [];
+  const normalVector = new THREE.Vector3(0, 1, 0);
+
+  // Generate extrusion vertices along the smooth spline path
+  for (let i = 0; i < trackSplinePoints.length; i++) {
+    const currentPoint = trackSplinePoints[i];
+    const nextPoint = trackSplinePoints[(i + 1) % trackSplinePoints.length];
+    
+    const forwardTangent = new THREE.Vector3().subVectors(nextPoint, currentPoint).normalize();
+    const sideVector = new THREE.Vector3().crossVectors(forwardTangent, normalVector).normalize();
+    
+    // Left and Right edge calculation based on width scale
+    const leftEdge = currentPoint.clone().addScaledVector(sideVector, -HIGHWAY_WIDTH / 2);
+    const rightEdge = currentPoint.clone().addScaledVector(sideVector, HIGHWAY_WIDTH / 2);
+
+    roadPositions.push(leftEdge.x, leftEdge.y, leftEdge.z);
+    roadPositions.push(rightEdge.x, rightEdge.y, rightEdge.z);
+
+    const uvV = i / trackSplinePoints.length;
+    roadUVs.push(0, uvV, 1, uvV);
+  }
+
+  const totalSegments = trackSplinePoints.length;
+  for (let i = 0; i < totalSegments; i++) {
+    const i0 = i * 2;
+    const i1 = i * 2 + 1;
+    const i2 = ((i + 1) % totalSegments) * 2;
+    const i3 = ((i + 1) % totalSegments) * 2 + 1;
+
+    // Direct face vertex assignment
+    roadIndices.push(i0, i2, i1);
+    roadIndices.push(i1, i2, i3);
+  }
+
+  const roadGeometry = new THREE.BufferGeometry();
+  roadGeometry.setAttribute("position", new THREE.Float32BufferAttribute(roadPositions, 3));
+  roadGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(roadUVs, 2));
+  roadGeometry.setIndex(roadIndices);
+  roadGeometry.computeVertexNormals();
+
+  const roadMaterial = new THREE.MeshStandardMaterial({
+    map: createAnimeAsphaltTexture(),
+    roughments: 0.35,
+    metalness: 0.1,
+    side: THREE.DoubleSide
+  });
+
+  const roadMesh = new THREE.Mesh(roadGeometry, roadMaterial);
+  roadMesh.receiveShadow = true;
+  scene.add(roadMesh);
+}
+generateHighwayTrack();
+
+/* ============================================================
+   INFINITE BASE WORLD ENVIRONMENT MESH
+   ============================================================ */
+
+// Stylized Emerald-Teal dark ground plane to give high contrast to the glowing orange sky
+const macroGroundGeometry = new THREE.PlaneGeometry(6000, 6000);
+const macroGroundMaterial = new THREE.MeshStandardMaterial({
+  color: 0x16232d,
+  roughness: 0.98,
+  metalness: 0.05
+});
+const macroGroundMesh = new THREE.Mesh(macroGroundGeometry, macroGroundMaterial);
+macroGroundMesh.rotation.x = -Math.PI / 2;
+macroGroundMesh.position.y = -0.15;
+macroGroundMesh.receiveShadow = true;
+scene.add(macroGroundMesh);
+
+/* ============================================================
+   ANIME STYLIZED DISTANT MOUNTAIN BACKDROP
+   ============================================================ */
+const mountainCluster = new THREE.Group();
+
+function buildMountainRange() {
+  const mountainSegments = 4;
+  const baseRadius = 140;
+  const peakHeight = 160;
+
+  const mountainGeo = new THREE.ConeGeometry(baseRadius, peakHeight, mountainSegments);
+  const mountainMat = new THREE.MeshStandardMaterial({
+    color: 0x3e2c47, // Rich purple tone for anime sunset shading
+    roughness: 0.9,
+    flatShading: true, // Low-poly geometric edge shading
+    emissive: 0x1f1126,
+    emissiveIntensity: 0.4
+  });
+
+  // Circle the world track inside a macro protective frame of ridges
+  for (let i = 0; i < 32; i++) {
+    const angle = (i / 32) * Math.PI * 2;
+    const radiusVariation = 900 + Math.random() * 250;
+    
+    const x = Math.cos(angle) * radiusVariation;
+    const z = Math.sin(angle) * radiusVariation;
+    
+    const individualMountain = new THREE.Mesh(mountainGeo, mountainMat);
+    individualMountain.position.set(x, peakHeight / 2 - 10, z);
+    individualMountain.scale.set(1 + Math.random()*0.8, 0.6 + Math.random()*0.9, 1 + Math.random()*0.8);
+    individualMountain.castShadow = true;
+    individualMountain.receiveShadow = true;
+    
+    mountainCluster.add(individualMountain);
+  }
+  scene.add(mountainCluster);
+}
+buildMountainRange();/* ============================================================
+   ADVANCED ANIME CORPORATE ARCHITECTURE & WINDOW INFRASTRUCTURE
+   ============================================================ */
+
+const cityInfrastructureGroup = new THREE.Group();
+scene.add(cityInfrastructureGroup);
+
+/**
+ * Generates a high-contrast procedural window grid canvas texture
+ * Provides crisp neon glowing windows for the corporate buildings
+ */
+function createBuildingWindowTexture(baseColorHex, windowColorHex) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+
+  // Base building facade color
+  ctx.fillStyle = baseColorHex;
+  ctx.fillRect(0, 0, 256, 512);
+
+  // Draw procedural structural window grids
+  const rows = 32;
+  const cols = 8;
+  const winWidth = 18;
+  const winHeight = 10;
+  const padX = 12;
+  const padY = 5;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      // Randomly turn off some lights for realistic anime aesthetic look
+      if (Math.random() > 0.15) {
+        ctx.fillStyle = windowColorHex;
+      } else {
+        ctx.fillStyle = "rgba(20, 20, 30, 0.85)";
+      }
+      
+      const x = padX + c * (winWidth + padX);
+      const y = padY + r * (winHeight + padY);
+      ctx.fillRect(x, y, winWidth, winHeight);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+/**
+ * Populates high-detail corporate blocks safely distributed outside track bounds
+ */
+function constructUrbanSkyline() {
+  const upwardDirection = new THREE.Vector3(0, 1, 0);
+  
+  // Custom materials with varying facade/window tone distributions
+  const structuralStyles = [
+    { facade: "#3b3047", window: "#ffdd6b" }, // Warm Gold Window Glow
+    { facade: "#2b3a4a", window: "#ff9f43" }, // Vibrant Sunset Amber Glow
+    { facade: "#4834d4", window: "#00ecff" }, // Cyber Neon Blue Accent
+    { facade: "#1e272e", window: "#ffffff" }  // Modern High-Contrast White
+  ];
+
+  // Pre-generate materials for enhanced loop performance without duplicate canvas rendering
+  const materials = structuralStyles.map(style => {
+    const tex = createBuildingWindowTexture(style.facade, style.window);
+    tex.repeat.set(2, 4);
+    return new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.25,
+      metalness: 0.3,
+      bumpMap: tex,
+      bumpScale: 0.02
+    });
+  });
+
+  // Iterate along the spline points to space buildings out systematically
+  for (let i = 0; i < trackSplinePoints.length; i += 7) {
+    const currentAnchor = trackSplinePoints[i];
+    const nextAnchor = trackSplinePoints[(i + 1) % trackSplinePoints.length];
+    
+    const forwardTangent = new THREE.Vector3().subVectors(nextAnchor, currentAnchor).normalize();
+    const orthogonalSide = new THREE.Vector3().crossVectors(forwardTangent, upwardDirection).normalize();
+
+    // Alternate distribution sides to build a structured corridor layout
+    const layoutSideIndicator = i % 2 === 0 ? 1 : -1;
+    
+    // Safety clearance zone definition (Guarantees track remains fully unobstructed)
+    const architecturalClearanceOffset = HIGHWAY_WIDTH / 2 + 18 + Math.random() * 30;
+    
+    const buildingTargetPosition = currentAnchor.clone().addScaledVector(
+      orthogonalSide, 
+      architecturalClearanceOffset * layoutSideIndicator
+    );
+
+    // Procedural multi-tier box parameters for complex skyscraper silhouettes
+    const baseWidth = 18 + Math.random() * 14;
+    const baseHeight = 60 + Math.random() * 95;
+    const baseDepth = 18 + Math.random() * 14;
+
+    const buildingGeometry = new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth);
+    const selectedMaterial = materials[Math.floor(Math.random() * materials.length)];
+
+    const skyscraperMesh = new THREE.Mesh(buildingGeometry, selectedMaterial);
+    skyscraperMesh.position.copy(buildingTargetPosition);
+    skyscraperMesh.position.y = baseHeight / 2 - 0.5; // Snap perfectly onto ground line
+    
+    skyscraperMesh.castShadow = true;
+    skyscraperMesh.receiveShadow = true;
+    
+    // Build roof styling structures (Helps break flat box uniformity)
+    if (Math.random() > 0.4) {
+      const spireHeight = 10 + Math.random() * 20;
+      const spireGeo = new THREE.CylinderGeometry(0.2, baseWidth * 0.15, spireHeight, 4);
+      const spireMesh = new THREE.Mesh(spireGeo, new THREE.MeshStandardMaterial({ color: 0x111116, metalness: 0.8 }));
+      spireMesh.position.set(0, baseHeight / 2 + spireHeight / 2, 0);
+      spireMesh.castShadow = true;
+      skyscraperMesh.add(spireMesh);
+    }
+
+    cityInfrastructureGroup.add(skyscraperMesh);
+  }
+}
+constructUrbanSkyline();
+
+/* ============================================================
+   HIGHWAY STREETLIGHT infrastructure GENERATION
+   ============================================================ */
+const lightingInfrastructureGroup = new THREE.Group();
+scene.add(lightingInfrastructureGroup);
+
+function buildTrackSideStreetlights() {
+  const upwardVector = new THREE.Vector3(0, 1, 0);
+  const poleGeometry = new THREE.CylinderGeometry(0.12, 0.2, 7, 8);
+  const armGeometry = new THREE.BoxGeometry(1.8, 0.1, 0.1);
+  const fixtureGeometry = new THREE.BoxGeometry(0.5, 0.15, 0.3);
+  
+  const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.7, roughness: 0.3 });
+  const emitterMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa44 }); // Sunset match ambient glow emission
+
+  for (let i = 0; i < trackSplinePoints.length; i += 18) {
+    const currentPoint = trackSplinePoints[i];
+    const nextPoint = trackSplinePoints[(i + 1) % trackSplinePoints.length];
+    
+    const forwardTangent = new THREE.Vector3().subVectors(nextPoint, currentPoint).normalize();
+    const sideVector = new THREE.Vector3().crossVectors(forwardTangent, upwardVector).normalize();
+
+    // Deploy poles symmetrically on both edges of the highway
+    [-1, 1].forEach((sideMultiplier) => {
+      const polePlacementOffset = (HIGHWAY_WIDTH / 2 + 1.2) * sideMultiplier;
+      const finalPolePosition = currentPoint.clone().addScaledVector(sideVector, polePlacementOffset);
+
+      const streetlightAssembly = new THREE.Group();
+      streetlightAssembly.position.copy(finalPolePosition);
+      
+      // Stand up vertical structural pole
+      const mainVerticalPole = new THREE.Mesh(poleGeometry, poleMaterial);
+      mainVerticalPole.position.y = 3.5;
+      mainVerticalPole.castShadow = true;
+      streetlightAssembly.add(mainVerticalPole);
+
+      // Extend arm overhanging the highway track space
+      const horizontalExtensionArm = new THREE.Mesh(armGeometry, poleMaterial);
+      horizontalExtensionArm.position.set(0.9 * -sideMultiplier, 7, 0);
+      horizontalExtensionArm.rotation.y = sideMultiplier === 1 ? 0 : Math.PI;
+      horizontalExtensionArm.castShadow = true;
+      streetlightAssembly.add(horizontalExtensionArm);
+
+      // Hanging direct illumination lens box
+      const lampFixture = new THREE.Mesh(fixtureGeometry, emitterMaterial);
+      lampFixture.position.set(1.8 * -sideMultiplier, 6.9, 0);
+      streetlightAssembly.add(lampFixture);
+
+      // Align light fixtures parallel facing towards next road nodes
+      streetlightAssembly.lookAt(nextPoint.clone().addScaledVector(sideVector, polePlacementOffset));
+      
+      lightingInfrastructureGroup.add(streetlightAssembly);
+    });
+  }
+}
+buildTrackSideStreetlights();/* ============================================================
+   ULTRA-DETAILED HIGH-PERFORMANCE JDM DRIFT CAR ARCHITECTURE
+   ============================================================ */
+
+function constructPremiumAnimeCar() {
+  const carRootGroup = new THREE.Group();
+
+  // Premium High-Gloss Metallic Candy Orange Paint (Anime Horizon Vibe)
+  const bodyPaintMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0xe67e22, 
+    metalness: 0.9, 
+    roughness: 0.12,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1
+  });
+
+  // Carbon Fiber Matte Black Finish for Aero Parts
+  const carbonAeroMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1c1c21,
+    metalness: 0.5,
+    roughness: 0.5
+  });
+
+  // Glossy Dark Tint Window Glass
+  const glassTintMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0d0d11,
+    roughness: 0.1,
+    metalness: 0.9
+  });
+
+  // Radiant Glowing Neon Red for active Tail Lights
+  const tailLightMaterial = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+
+  /* ------------------------------------------------------------
+     1. LOWER CHASSIS & WIDE-BODY SPLITTER LAYER
+     ------------------------------------------------------------ */
+  const lowerChassis = new THREE.Mesh(
+    new THREE.BoxGeometry(2.3, 0.2, 4.8),
+    carbonAeroMaterial
+  );
+  lowerChassis.position.y = 0.3;
+  lowerChassis.castShadow = true;
+  lowerChassis.receiveShadow = true;
+  carRootGroup.add(lowerChassis);
+
+  /* ------------------------------------------------------------
+     2. MAIN AERODYNAMIC BODY STRUCTURE
+     ------------------------------------------------------------ */
+  const mainBodyMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.6, 4.6),
+    bodyPaintMaterial
+  );
+  mainBodyMesh.position.y = 0.65;
+  mainBodyMesh.castShadow = true;
+  mainBodyMesh.receiveShadow = true;
+  carRootGroup.add(mainBodyMesh);
+
+  // Angled Front JDM Racing Hood Bonnet
+  const hoodGeometry = new THREE.BoxGeometry(2.18, 0.15, 1.6);
+  const hoodMesh = new THREE.Mesh(hoodGeometry, carbonAeroMaterial);
+  hoodMesh.position.set(0, 0.88, 1.4);
+  hoodMesh.rotation.x = 0.08;
+  hoodMesh.castShadow = true;
+  carRootGroup.add(hoodMesh);
+
+  /* ------------------------------------------------------------
+     3. STREAMLINED GREENHOUSE CABIN & GLASS
+     ------------------------------------------------------------ */
+  const cabinCore = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.55, 2.4),
+    glassTintMaterial
+  );
+  cabinCore.position.set(0, 1.15, -0.2);
+  cabinCore.castShadow = true;
+  carRootGroup.add(cabinCore);
+
+  // Structural Front Windshield Frame Overlay
+  const windshieldPillarL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.65, 0.08), bodyPaintMaterial);
+  windshieldPillarL.position.set(-0.78, 1.15, 0.95);
+  windshieldPillarL.rotation.x = -0.5;
+  carRootGroup.add(windshieldPillarL);
+
+  const windshieldPillarR = windshieldPillarL.clone();
+  windshieldPillarR.position.x = 0.78;
+  carRootGroup.add(windshieldPillarR);
+
+  /* ------------------------------------------------------------
+     4. DOUBLE-WING HIGH-DOWNFORCE JDM SPOILER SYSTEM
+     ------------------------------------------------------------ */
+  const spoilerMountL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.2), carbonAeroMaterial);
+  spoilerMountL.position.set(-0.85, 1.1, -2.1);
+  spoilerMountL.rotation.x = -0.1;
+  carRootGroup.add(spoilerMountL);
+
+  const spoilerMountR = spoilerMountL.clone();
+  spoilerMountR.position.x = 0.85;
+  carRootGroup.add(spoilerMountR);
+
+  // Dual Aerofoil Upper Wing Deck
+  const upperWingDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 0.06, 0.6),
+    bodyPaintMaterial
+  );
+  upperWingDeck.position.set(0, 1.4, -2.15);
+  upperWingDeck.castShadow = true;
+  carRootGroup.add(upperWingDeck);
+
+  /* ------------------------------------------------------------
+     5. ILLUMINATION SIGNATURE & TAIL LIGHT BAR
+     ------------------------------------------------------------ */
+  const rearLightBar = new THREE.Mesh(
+    new THREE.BoxGeometry(1.9, 0.08, 0.05),
+    tailLightMaterial
+  );
+  rearLightBar.position.set(0, 0.75, -2.31);
+  carRootGroup.add(rearLightBar);
+
+  /* ------------------------------------------------------------
+     6. DRIFT WHEELS & DEEP-DISH CHROMIUM RIMS
+     ------------------------------------------------------------ */
+  const tireGeometry = new THREE.CylinderGeometry(0.48, 0.48, 0.45, 32);
+  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x121214, roughness: 0.85 });
+  const deepDishRimMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0xf39c12, 
+    metalness: 0.95, 
+    roughness: 0.08 
+  });
+
+  const wheelsRegistry = {};
+  const wheelHubCoordinates = {
+    frontLeft: [-1.16, 0.48, 1.45],
+    frontRight: [1.16, 0.48, 1.45],
+    rearLeft: [-1.16, 0.48, -1.45],
+    rearRight: [1.16, 0.48, -1.45]
+  };
+
+  for (const [hubName, coords] of Object.entries(wheelHubCoordinates)) {
+    const wheelAssemblyGroup = new THREE.Group();
+
+    const rubberTire = new THREE.Mesh(tireGeometry, tireMaterial);
+    rubberTire.rotation.z = Math.PI / 2;
+    rubberTire.castShadow = true;
+    wheelAssemblyGroup.add(rubberTire);
+
+    // Deep-Dish Customized Inner Rim Spoke Center
+    const customRim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.47, 16),
+      deepDishRimMaterial
+    );
+    customRim.rotation.z = Math.PI / 2;
+    wheelAssemblyGroup.add(customRim);
+
+    wheelAssemblyGroup.position.set(coords[0], coords[1], coords[2]);
+    carRootGroup.add(wheelAssemblyGroup);
+    
+    // Cache wheel nodes for dynamic mechanical rotation handling later
+    wheelsRegistry[hubName] = wheelAssemblyGroup;
+  }
+
+  carRootGroup.userData.wheels = wheelsRegistry;
+  carRootGroup.position.y = 0.02;
+  return carRootGroup;
+}
+
+/* ============================================================
+   AI ENEMY RACING CARS ENGINE INITIALIZATION
+   ============================================================ */
+const opponentAICarsList = [];
+const aiColorsPalette = [0x3498db, 0x9b59b6, 0xe74c3c, 0x2ecc71]; // Neon Blue, Purple, Red, Green
+function createOpponentAICarsSystem(totalOpponentsCount = 5) {
+  for (let i = 0; i < totalOpponentsCount; i++) {
+    // Clone body architecture but apply unique random anime color paints
+    const aiCarMesh = constructPremiumAnimeCar();
+    
+    // Override material color for this AI instance specifically
+    aiCarMesh.traverse((childNode) => {
+      if (childNode.isMesh && childNode.material.color.getHex() === 0xe67e22) {
+        childNode.material = childNode.material.clone();
+        childNode.material.color.setHex(aiColorsPalette[i % aiColorsPalette.length]);
+      }
+    });
+    // Distribute cars evenly across different intervals of the spline points array
+    const startingProgressOffset = (i + 1) * 0.18; 
+    
+    // Distribute across lanes (Left, Center, Right) using track layout offset multipliers
+    const laneOffsetDistance = ((i % 3) - 1) * (HIGHWAY_WIDTH * 0.22);
+    const aiCarStateNode = {
+      mesh: aiCarMesh,
+      splineProgress: startingProgressOffset,
+      baseCruiseSpeed: 0.10 + Math.random() * 0.05, // Dynamic procedural velocity shifts
+      laneOffset: laneOffsetDistance
+    };
+    scene.add(aiCarMesh);
+    opponentAICarsList.push(aiCarStateNode);
+  }
+}
+// Instantiate target amount of dynamic competitor nodes
+createOpponentAICarsSystem(5);
+
+// Instantiate premium JDM model to global environment scope
+const car = constructPremiumAnimeCar();
+scene.add(car);/**
+ * Processes smooth continuous pathing animations for AI racers along loop curves
+ */
+function runAICarsPhysicsTick(deltaTime) {
+  const currentUpwardAxis = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < opponentAICarsList.length; i++) {
+    const aiNode = opponentAICarsList[i];
+    // Increment progress counter dynamically around the continuous track loop
+    aiNode.splineProgress += aiNode.baseCruiseSpeed * deltaTime;
+    if (aiNode.splineProgress > 1.0) aiNode.splineProgress -= 1.0;
+    // Fetch primary spline target transforms based on track math positions
+    const spatialPointOnSpline = trackSpline.getPointAt(aiNode.splineProgress);
+    const forwardMovementTangent = trackSpline.getTangentAt(aiNode.splineProgress).normalize();
+    const lateralSideVector = new THREE.Vector3().crossVectors(forwardMovementTangent, currentUpwardAxis).normalize();
+    // Re-project AI target points out cleanly onto assigned road lanes
+    spatialPointOnSpline.addScaledVector(lateralSideVector, aiNode.laneOffset);
+    aiNode.mesh.position.copy(spatialPointOnSpline);
+    aiNode.mesh.position.y = 0.02; // Precision surface snap matching master car
+    // Force orientation alignment updates towards forward node trajectories
+    const visualLookAheadTarget = trackSpline.getPointAt((aiNode.splineProgress + 0.005) % 1.0);
+    visualLookAheadTarget.addScaledVector(lateralSideVector, aiNode.laneOffset);
+    aiNode.mesh.lookAt(visualLookAheadTarget);
+    // Apply smooth spinning rotations onto individual AI rim matrices 
+    const linearSpinDelta = 18 * deltaTime; 
+    for (const rimNode of Object.values(aiNode.mesh.userData.wheels)) {
+      rimNode.rotation.x += linearSpinDelta;
+    }
+  }
+}
+
+/* ============================================================
+   HIGH-SPEED INPUT PROCESSING ENGINE & REAL-TIME CONTROLS
+   ============================================================ */
+const hardwareControlMap = { steeringInput: 0, acceleratorInput: 0, decelerationInput: 0 };
+const keystrokeRegistry = {};
+
+// Event listeners intercepting low-latency keystroke registers
+window.addEventListener("keydown", (event) => {
+  keystrokeRegistry[event.key.toLowerCase()] = true;
+});
+
+window.addEventListener("keyup", (event) => {
+  keystrokeRegistry[event.key.toLowerCase()] = false;
+});
+
+/**
+ * Sweeps input maps to extract current driving commands
+ */
+function queryDrivingControlInputs() {
+  let directionalSteer = 0;
+  let powerThrottle = 0;
+  let mechanicalBrake = 0;
+
+  if (keystrokeRegistry["a"] || keystrokeRegistry["arrowleft"]) directionalSteer -= 1.0;
+  if (keystrokeRegistry["d"] || keystrokeRegistry["arrowright"]) directionalSteer += 1.0;
+  if (keystrokeRegistry["w"] || keystrokeRegistry["arrowup"]) powerThrottle = 1.0;
+  if (keystrokeRegistry["s"] || keystrokeRegistry["arrowdown"]) mechanicalBrake = 1.0;
+
+  return { 
+    steer: directionalSteer !== 0 ? directionalSteer : hardwareControlMap.steeringInput, 
+    throttle: Math.max(powerThrottle, hardwareControlMap.acceleratorInput), 
+    brake: Math.max(mechanicalBrake, hardwareControlMap.decelerationInput) 
+  };
+}
+
+/* ============================================================
+   JDM RIGID PHYSICS SIMULATION SYSTEM
+   ============================================================ */
+const jdmKinematicsState = { 
+  currentVelocity: 0, 
+  headingAngle: 0, 
+  velocityCap: 58, 
+  engineThrustRate: 32, 
+  kineticFriction: 12 
+};
+
+/**
+ * Computes positional displacements, wheel spin, and forces wall containment rules
+ */
+function processVehiclePhysicsTick(deltaTime) {
+  const driversCommand = queryDrivingControlInputs();
+
+  // Apply acceleration vectors or deceleration force drops
+  if (driversCommand.throttle > 0.01) {
+    jdmKinematicsState.currentVelocity += driversCommand.throttle * jdmKinematicsState.engineThrustRate * deltaTime;
+  } else if (driversCommand.brake > 0.01) {
+    jdmKinematicsState.currentVelocity -= driversCommand.brake * jdmKinematicsState.engineThrustRate * 1.8 * deltaTime;
+  } else {
+    const motionPolarity = Math.sign(jdmKinematicsState.currentVelocity);
+    jdmKinematicsState.currentVelocity -= motionPolarity * jdmKinematicsState.kineticFriction * deltaTime;
+    if (Math.sign(jdmKinematicsState.currentVelocity) !== motionPolarity) {
+      jdmKinematicsState.currentVelocity = 0;
+    }
+  }
+
+  // Constrain speed limits within performance thresholds
+  jdmKinematicsState.currentVelocity = THREE.MathUtils.clamp(
+    jdmKinematicsState.currentVelocity, 
+    -18, 
+    jdmKinematicsState.velocityCap
+  );
+
+  // Steer computation linked directly to forward wheel velocity direction
+  jdmKinematicsState.headingAngle -= driversCommand.steer * 2.6 * deltaTime * Math.sign(jdmKinematicsState.currentVelocity || 1);
+
+  const headingVector = new THREE.Vector3(
+    Math.sin(jdmKinematicsState.headingAngle), 
+    0, 
+    Math.cos(jdmKinematicsState.headingAngle)
+  );
+  
+  const hypotheticalPosition = car.position.clone().addScaledVector(
+    headingVector, 
+    jdmKinematicsState.currentVelocity * deltaTime
+  );
+
+  /* ------------------------------------------------------------
+     STRICT PROCEDURAL TRACK BOUNDARY LOCK MATH LOOP
+     ------------------------------------------------------------ */
+  let matchingTrackSplineNode = trackSplinePoints[0];
+  let shortestDistanceSquared = Infinity;
+
+  for (let i = 0; i < trackSplinePoints.length; i++) {
+    const distanceSquared = hypotheticalPosition.distanceToSquared(trackSplinePoints[i]);
+    if (distanceSquared < shortestDistanceSquared) {
+      shortestDistanceSquared = distanceSquared;
+      matchingTrackSplineNode = trackSplinePoints[i];
+    }
+  }
+
+  const absoluteLinearDistance = Math.sqrt(shortestDistanceSquared);
+  const boundarySafetyMargin = HIGHWAY_WIDTH / 2 - 1.6; 
+
+  // Push back vehicle if trying to escape outside track border walls
+  if (absoluteLinearDistance > boundarySafetyMargin) {
+    const escapeTrajectoryVector = hypotheticalPosition.clone().sub(matchingTrackSplineNode);
+    escapeTrajectoryVector.y = 0;
+    escapeTrajectoryVector.normalize().multiplyScalar(boundarySafetyMargin);
+    
+    car.position.copy(matchingTrackSplineNode).add(escapeTrajectoryVector);
+    jdmKinematicsState.currentVelocity *= 0.82; // Friction penalty drag for wall hits
+  } else {
+    car.position.copy(hypotheticalPosition);
+  }
+
+  // Apply orientation rotations onto car main mesh node
+  car.rotation.y = jdmKinematicsState.headingAngle;
+
+  // Real-time wheel rotation and front visual steering tracking angles
+  const angularSpinDelta = (jdmKinematicsState.currentVelocity * deltaTime) / 0.48;
+  for (const wheelNode of Object.values(car.userData.wheels)) {
+    wheelNode.rotation.x += angularSpinDelta;
+  }
+  car.userData.wheels.frontLeft.rotation.y = driversCommand.steer * 0.38;
+  car.userData.wheels.frontRight.rotation.y = driversCommand.steer * 0.38;
+
+  // Render velocity numeric counter metric inside UI HUD
+  document.getElementById("hud-velocity-value").textContent = Math.round(Math.abs(jdmKinematicsState.currentVelocity) * 3);
+}
+
+/* ============================================================
+   CINEMATIC SMOOTH CAMERA FLUID CHASE SYSTEM
+   ============================================================ */
+const rigidChaseOffset = new THREE.Vector3(0, 3.2, -8.8);
+const dynamicTargetLookAnchor = new THREE.Vector3(0, 1.1, 4.0);
+
+function executeCinematicCameraUpdate(deltaTime) {
+  const dynamicAngleOffset = rigidChaseOffset.clone().applyAxisAngle(
+    new THREE.Vector3(0, 1, 0), 
+    jdmKinematicsState.headingAngle
+  );
+  
+  const optimizedTargetCameraPosition = car.position.clone().add(dynamicAngleOffset);
+  
+  // Use frame rate independent linear interpolation for ultra-smooth follow feel
+  camera.position.lerp(optimizedTargetCameraPosition, 1 - Math.pow(0.0001, deltaTime));
+
+  const directionalLookPoint = car.position.clone().add(
+    dynamicTargetLookAnchor.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), jdmKinematicsState.headingAngle)
+  );
+  camera.lookAt(directionalLookPoint);
+}
+
+/* ============================================================
+   CORE TIME-TICK SYSTEM & RENDERING ANIMATION ENGINE LOOP
+   ============================================================ */
+const systemClock = new THREE.Clock();
+
+function mainEngineRenderLoop() {
+  requestAnimationFrame(mainEngineRenderLoop);
+
+  // Impose high processing time safety cap to avoid out of phase frame lag skips
+  const loopDeltaTime = Math.min(systemClock.getDelta(), 0.04);
+
+  runAICarsPhysicsTick(loopDeltaTime);
+  processVehiclePhysicsTick(loopDeltaTime);
+  executeCinematicCameraUpdate(loopDeltaTime);
+  
+  // Render full visual composition using high speed post-processing pipes
+  composer.render();
+}
+
+// Fire up core initialization pulse sequence
+mainEngineRenderLoop();
+
+/* ============================================================
+   RESPONSIVE CANVAS RESIZER ADAPTER STAGE
+   ============================================================ */
+window.addEventListener("resize", () => {
+  const newWidth = window.innerWidth;
+  const newHeight = window.innerHeight;
+
+  camera.aspect = newWidth / newHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(newWidth, newHeight);
+  composer.setSize(newWidth, newHeight);
+
+  const ratio = renderer.getPixelRatio();
+  fxaaPass.material.uniforms['resolution'].value.x = 1 / (newWidth * ratio);
+  fxaaPass.material.uniforms['resolution'].value.y = 1 / (newHeight * ratio);
+});
+</script>
+</body>
+</html>
